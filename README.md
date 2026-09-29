@@ -158,7 +158,7 @@ Open **http://127.0.0.1:7860**. The model loads on the first inference.
 2. Choose the inference long edge and image limit / video frame count.
    Video frames are sampled uniformly over the whole clip. The first image
    or sampled frame is the reference view.
-3. Click **开始分解** to run inference. Inspect the albedo, shading, residual,
+3. Click **Run decomposition** to run inference. Inspect the albedo, shading, residual,
    reconstruction, relative depth and normal tabs.
 4. Download the ZIP containing PNG previews, raw NPZ maps and metadata.
 

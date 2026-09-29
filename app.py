@@ -29,10 +29,10 @@ def srgb_preview(x):
 
 def read_frames(files, video, max_frames):
     if files and video:
-        raise ValueError('请选择图片或视频中的一种输入。')
+        raise ValueError('Choose either images or a video, and clear the other input.')
     if files:
         if len(files) > max_frames:
-            raise ValueError(f'最多上传 {max_frames} 张图片，请减少图片或提高帧数上限。')
+            raise ValueError(f'Upload up to {max_frames} images. Use fewer images or increase the frame limit.')
         frames = []
         for path in files:
             with Image.open(path) as image:
@@ -45,18 +45,18 @@ def read_frames(files, video, max_frames):
         try:
             count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             if count <= 0:
-                raise ValueError('无法读取视频帧数，请换一个视频文件。')
+                raise ValueError('Could not read the video frame count. Try another video file.')
             frames = []
             for idx in np.linspace(0, count-1, min(max_frames, count), dtype=int):
                 cap.set(cv2.CAP_PROP_POS_FRAMES, int(idx))
                 ok, frame = cap.read()
                 if not ok:
-                    raise ValueError(f'视频第 {idx} 帧读取失败。')
+                    raise ValueError(f'Could not read video frame {idx}.')
                 frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             return frames
         finally:
             cap.release()
-    raise ValueError('请上传同一场景的图片，或一个视频。')
+    raise ValueError('Upload images of the same scene, or a video.')
 
 
 def prepare_frames(frames, size):
@@ -118,7 +118,7 @@ class Inference:
                 del prediction
                 for name, value in raw.items():
                     if not np.isfinite(value).all():
-                        raise ValueError(f'{name} 输出含非有限值，请检查输入与权重。')
+                        raise ValueError(f'The {name} output contains non-finite values. Check the inputs and checkpoint.')
                 raw['reconstruction'] = raw['albedo']*raw['shading'] + raw['residual']
                 raw['input'] = images.permute(0, 2, 3, 1).numpy()
                 result_dir = Path(tempfile.mkdtemp(prefix='mvid_', dir=self.output_dir))
@@ -159,35 +159,35 @@ class Inference:
                     for path in sorted(result_dir.iterdir()):
                         if path != archive:
                             z.write(path,path.name)
-                status = f'完成：{len(frames)} 个视角，推理尺寸 {images.shape[-1]}×{images.shape[-2]}，耗时 {time.perf_counter()-started:.1f} 秒。'
+                status = f'Done: {len(frames)} views, inference size {images.shape[-1]}×{images.shape[-2]}, elapsed {time.perf_counter()-started:.1f} seconds.'
                 return (*(galleries[name] for name in OUTPUT_NAMES), str(archive), status)
             except torch.cuda.OutOfMemoryError as exc:
                 gc.collect()
                 torch.cuda.empty_cache()
-                raise gr.Error('显存不足：请减少视角数或降低分辨率后重试。') from exc
+                raise gr.Error('GPU memory is full. Use fewer views or a lower resolution and try again.') from exc
             except (ValueError, OSError) as exc:
                 raise gr.Error(str(exc)) from exc
 
 
 def build_app(engine):
     with gr.Blocks(title='MVID · Inference') as demo:
-        gr.Markdown('# MVID 多视角分解\n上传同一场景的不同视角，联合预测反照率、光照和残差。也支持单张图片。')
+        gr.Markdown('# MVID Multi-view Intrinsic Decomposition\nUpload views of the same scene to jointly predict albedo, shading and residual. Single images are also supported.')
         with gr.Row():
-            files = gr.File(label='图片（按上传顺序，第 1 张为参考视角）', file_count='multiple', file_types=['image'], type='filepath')
-            video = gr.Video(label='或上传视频（均匀抽帧）')
+            files = gr.File(label='Images (upload order; first image is the reference view)', file_count='multiple', file_types=['image'], type='filepath')
+            video = gr.Video(label='Or upload a video (uniform frame sampling)')
         with gr.Row():
-            size = gr.Dropdown([280, 518, 700], value=518, label='推理长边')
-            max_frames = gr.Slider(1,16,value=8,step=1,label='图片数量上限 / 视频抽帧数')
-        button = gr.Button('开始分解', variant='primary')
-        status = gr.Textbox(label='状态', interactive=False)
-        gr.Markdown('Albedo / 重建以 sRGB 显示；Shading / Residual 使用各自统一曝光方便观察。下载包保留原始线性数据。深度为相对深度，法线位于第一视角坐标系。')
+            size = gr.Dropdown([280, 518, 700], value=518, label='Inference long edge (pixels)')
+            max_frames = gr.Slider(1,16,value=8,step=1,label='Image limit / video frame count')
+        button = gr.Button('Run decomposition', variant='primary')
+        status = gr.Textbox(label='Status', interactive=False)
+        gr.Markdown('Albedo and reconstruction are displayed in sRGB. Shading and residual each use a shared exposure across views for display. Downloads preserve the raw linear maps. Depth is relative; normals are in the first view’s camera coordinates.')
         galleries = []
-        labels = ['输入','Albedo · 反照率','Shading · 光照','Residual · 残差','重建 A×S+R','深度','法线']
+        labels = ['Input','Albedo','Shading','Residual','Reconstruction A×S+R','Depth','Normals']
         with gr.Tabs():
             for label in labels:
                 with gr.Tab(label):
                     galleries.append(gr.Gallery(label=label, columns=2, height=520, object_fit='contain', format='png'))
-        download = gr.File(label='下载 PNG + 原始 NPZ + metadata', interactive=False)
+        download = gr.File(label='Download PNG previews + raw NPZ maps + metadata', interactive=False)
         button.click(engine.run, [files,video,size,max_frames], [*galleries,download,status], concurrency_limit=1, api_name='decompose')
     return demo
 
@@ -201,7 +201,7 @@ def main():
     parser.add_argument('--output-dir',default='outputs/gradio')
     args = parser.parse_args()
     if args.device.startswith('cuda') and not torch.cuda.is_available():
-        parser.error('CUDA 不可用，请激活包含 CUDA PyTorch 的环境，或显式使用 --device cpu。')
+        parser.error('CUDA is unavailable. Activate an environment with CUDA-enabled PyTorch, or explicitly use --device cpu.')
     engine = Inference(args.checkpoint,args.device,args.output_dir)
     build_app(engine).queue(max_size=4).launch(server_name=args.host,server_port=args.port,
                                              share=False,allowed_paths=[str(engine.output_dir)])
