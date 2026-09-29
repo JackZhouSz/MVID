@@ -3,3 +3,6 @@ __pycache__/
 *.pt
 *.pth
 *.ckpt
+*.safetensors
+outputs/
+.gradio/
