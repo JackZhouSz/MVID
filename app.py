@@ -1,4 +1,4 @@
-"""Local Gradio inference for the TIID2/VGGT-based MVID release."""
+"""Local Gradio inference for MVID."""
 import argparse
 import gc
 import json

@@ -83,7 +83,7 @@ conda activate mvid
 ```
 
 `environment.yaml` contains Python 3.11 and the inference packages extracted
-from our working `tiid` environment, including their transitive Python
+from our validated MVID inference environment, including their transitive Python
 dependencies with exact versions. It includes Gradio, Hugging Face Hub, NumPy,
 Pillow, OpenCV and einops. It is self-contained and does not read a separate
 requirements file. Training-only packages are not required for this release.
@@ -272,4 +272,3 @@ detail. Keep the original linear maps for reconstruction and numerical work.
 The NPZ `input` is already sRGB; depth and normals are geometric data and should
 not receive an sRGB conversion.
 
-This release uses the VGGT/TIID2 model architecture.

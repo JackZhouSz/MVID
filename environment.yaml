@@ -1,4 +1,4 @@
-# Inference dependencies extracted from the working tiid environment.
+# Inference dependencies extracted from the validated MVID inference environment.
 # Includes transitive Python dependencies, pinned to their installed versions.
 # Install PyTorch / torchvision / CUDA separately as described in README.md.
 name: mvid
