@@ -200,6 +200,14 @@ an upper limit, not a subsampling option. List images in the desired view order.
 
 ## Inference outputs
 
+> **Color space:** Raw model predictions and the exported NPZ `albedo`,
+> `shading`, `residual` and `reconstruction` maps are in **linear RGB**, not sRGB.
+> If your application needs sRGB, you must perform the conversion yourself.
+> Compute `A * S + R` in linear space **before** converting for display.
+> The Gradio gallery and exported PNG previews already have display conversions
+> applied; do not apply a second linear-to-sRGB conversion to them.
+
+
 Gradio saves results under `outputs/gradio/`; command-line inference uses
 `outputs/inference/`. Every run creates its own subdirectory containing
 `view_000_albedo.png`, other preview PNGs, `view_000_linear.npz`,
@@ -239,5 +247,29 @@ and clipped to [0, 1]. Shading and residual each use a separate 99th-percentile
 exposure shared across all frames and RGB channels, followed by sRGB conversion.
 These display operations do not alter the raw NPZ values. Use NPZ maps for
 numerical analysis or further processing.
+
+For example, convert a raw linear albedo map to an sRGB preview yourself:
+
+```python
+import numpy as np
+from PIL import Image
+
+
+def linear_to_srgb(x):
+    x = np.maximum(np.asarray(x, dtype=np.float32), 0.0)
+    return np.where(x <= 0.0031308, 12.92 * x,
+                    1.055 * np.power(x, 1.0 / 2.4) - 0.055)
+
+
+albedo_srgb = linear_to_srgb(albedo)
+preview = np.uint8(np.clip(albedo_srgb, 0, 1) * 255 + 0.5)
+Image.fromarray(preview).save("albedo_srgb.png")
+```
+
+For HDR shading, residual or reconstruction, choose an exposure or tone mapping
+for display before sRGB encoding. Simply clipping values above 1 loses highlight
+detail. Keep the original linear maps for reconstruction and numerical work.
+The NPZ `input` is already sRGB; depth and normals are geometric data and should
+not receive an sRGB conversion.
 
 This release uses the VGGT/TIID2 model architecture.

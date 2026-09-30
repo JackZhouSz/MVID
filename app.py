@@ -180,7 +180,7 @@ def build_app(engine):
             max_frames = gr.Slider(1,16,value=8,step=1,label='Image limit / video frame count')
         button = gr.Button('Run decomposition', variant='primary')
         status = gr.Textbox(label='Status', interactive=False)
-        gr.Markdown('Albedo and reconstruction are displayed in sRGB. Shading and residual each use a shared exposure across views for display. Downloads preserve the raw linear maps. Depth is relative; normals are in the first view’s camera coordinates.')
+        gr.Markdown('**Color space:** Raw model predictions and NPZ albedo, shading, residual and reconstruction maps are **linear RGB, not sRGB**. Convert them yourself if you need sRGB, and compute A×S+R in linear space first. Gallery images and PNG previews are already display-converted; do not convert them again. Shading and residual previews each use a shared exposure across views before sRGB encoding. The NPZ input is already sRGB. Depth is relative; normals are in the first view’s camera coordinates. Do not apply sRGB encoding to depth or normals.')
         galleries = []
         labels = ['Input','Albedo','Shading','Residual','Reconstruction A×S+R','Depth','Normals']
         with gr.Tabs():
