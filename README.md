@@ -5,7 +5,7 @@
 **Multi-view intrinsic decomposition — albedo, shading and the non-diffuse residual, in one pass over all views**
 
 <a href="https://arxiv.org/abs/2512.23667"><img src="https://img.shields.io/badge/arXiv-2512.23667-b31b1b" alt="arXiv"></a>
-<a href="https://dukang92-mvid-demo.hf.space"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Demo-blue" alt="HF Space"></a>
+<a href="https://dukang92-mvid-demo.hf.space"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Demo-blue" alt="MVID-Omega HF Space"></a>
 
 **SIGGRAPH Asia 2026 (Conference Papers)**
 
@@ -13,262 +13,143 @@
 
 </div>
 
-## In progress
+MVID jointly decomposes views of the same scene into **albedo (A)**,
+**RGB shading (S)** and **residual (R)**:
 
-- [x] Inference code
-- [x] Interactive demo — [try it](https://dukang92-mvid-demo.hf.space)
-- [x] Pretrained weights — [Hugging Face](https://huggingface.co/dukang92/MVID_MODEL)
-- [ ] VGGT-Ω backbone variant
-
-**Weights** are available on [Hugging Face](https://huggingface.co/dukang92/MVID_MODEL).
-**The VGGT-Ω variant** keeps the same `I = A · S + R` contract and the
-same heads, so it swaps the aggregator rather than being a different model, and
-it will ship alongside the VGGT-based one rather than replacing it.
-
-## What it does
-
-MVID takes several views of one scene and splits every pixel of every view into
-
-```
-I = A · S + R
+```text
+I = A * S + R
 ```
 
-- **A** — diffuse albedo. Reflectance, not base colour: metals go dark, because a
-  mirror finish carries no diffuse component.
-- **S** — three-channel coloured irradiance, unbounded and HDR.
-- **R** — the non-diffuse residual: speculars, visible light sources,
-  interreflections.
+## Choose a version
 
-Two choices separate it from single-image intrinsic decomposition.
+| | MVID | MVID-Omega |
+| --- | --- | --- |
+| Backbone | VGGT | VGGT-Omega |
+| Prediction heads | Separate heads | Shared dense trunk with separate outputs |
+| GPU memory | Higher | Lower |
+| Training focus | General scene decomposition | Greater emphasis on object-level decomposition |
+| Weights | [dukang92/MVID_MODEL](https://huggingface.co/dukang92/MVID_MODEL) | [dukang92/MVID](https://huggingface.co/dukang92/MVID) |
+| Local inputs | Images or video | Images |
+| Gradio | `app.py`, port **7860** | `mvid-omega/app.py`, port **7861** |
+| Command line | `inference.py` | `mvid-omega/inference.py` |
 
-**The views are decomposed jointly, not one at a time.** A surface seen from
-several angles is reasoned about once, across the whole input set, which is what
-holds albedo steady between viewpoints — the standard failure of per-image
-methods is that one wall comes out a different colour in every frame, which
-makes the output useless for anything downstream that spans views.
+**Use the matching weights and entry point: the two versions are not interchangeable.**
+Both versions have released weights and local Gradio demos. The
+[hosted demo](https://huggingface.co/spaces/dukang92/MVID-Demo) runs **MVID-Omega**.
+Its interface also supports video; the local Omega demo currently accepts images.
 
-<div align="center">
+## Install
 
-![Stable albedo across views: MVID vs a single-view baseline](assets/f1_single.gif)
-
-</div>
-
-**R is predicted, not subtracted.** Defining the residual as `I − A·S` turns it
-into an error bucket that quietly absorbs every mistake in A and S. Here it is a
-head with its own supervision, so a highlight leaves the albedo instead of being
-baked into it. The two are also separable by a test the loss can apply: warped
-between views, diffuse content agrees and speculars do not.
-
-`S` and `R` are HDR, which is what makes relighting possible downstream:
-substituting a new `S′` and rescaling `R` re-lights the scene without touching
-the albedo.
-
-## Acknowledgements
-
-Our model builds on [VGGT](https://github.com/facebookresearch/vggt) (Wang et
-al., CVPR 2025): the multi-view aggregator is initialized from VGGT's
-geometry-pretrained checkpoint, and part of the code in `mvid/` (aggregator,
-transformer layers, DPT heads, and utilities) is reused and adapted from the
-VGGT codebase. We thank the authors for releasing their excellent work.
-
-## Installation
-
-Run these commands from a terminal with Conda installed:
+Run from a terminal with Conda installed. Both versions use the same environment.
 
 ```bash
 git clone https://github.com/dukang/MVID.git
 cd MVID
 conda env create -f environment.yaml
 conda activate mvid
-```
-
-`environment.yaml` contains Python 3.11 and the inference packages extracted
-from our validated MVID inference environment, including their transitive Python
-dependencies with exact versions. It includes Gradio, Hugging Face Hub, NumPy,
-Pillow, OpenCV and einops. It is self-contained and does not read a separate
-requirements file. Training-only packages are not required for this release.
-
-**Install PyTorch and its CUDA runtime separately** after activating `mvid`.
-The tested combination is PyTorch 2.11.0, torchvision 0.26.0 and CUDA 12.8:
-
-```bash
 python -m pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
+python -m pip install safetensors
 ```
 
-The supported configuration is Linux with an NVIDIA GPU and a driver compatible
-with CUDA 12.8. This command installs the CUDA-enabled PyTorch wheels and their
-runtime dependencies; a separate system CUDA toolkit installation is not needed.
-The NVIDIA driver must already be installed on the host. PyTorch, torchvision
-and CUDA packages are deliberately excluded from `environment.yaml`.
+Tested on Linux with an NVIDIA GPU. A CUDA 12.8-compatible NVIDIA driver is
+required; the PyTorch command installs the CUDA runtime. No separate CUDA
+toolkit is needed. PyTorch/CUDA are installed separately from `environment.yaml`.
 
-For an existing Python 3.11 environment, `python -m pip install -r
-requirements-demo.txt` installs the same non-GPU dependencies as the YAML;
-then run the PyTorch installation command above.
+**Run all commands below from the repository root.**
 
-Check that PyTorch can access your GPU:
+## MVID
 
-```bash
-python -c "import torch; print(torch.__version__); print('CUDA available:', torch.cuda.is_available())"
-```
-
-The release was tested in FP32 on an NVIDIA RTX PRO 6000. Two views at
-518 × 350 used approximately 10.1 GiB peak GPU memory in our smoke test;
-this is an example, not a fixed memory requirement. Start with 2–4 views
-at a long edge of 518 pixels, and reduce the view count or use 280 pixels
-if you run out of memory.
-
-## Download the weights
-
-The ep100 inference checkpoint is named
-`mvid_5ds2_inference.pt` (approximately 8.97 GB). It contains
-model weights only, without optimizer or other training state. It is supplied
-separately from GitHub.
-
-Download from [dukang92/MVID_MODEL](https://huggingface.co/dukang92/MVID_MODEL):
+Download the weights (about **8.97 GB**) and start Gradio:
 
 ```bash
 hf download dukang92/MVID_MODEL mvid_5ds2_inference.pt --local-dir model
-```
-
-Alternatively, download the file manually from the model repository's
-**Files and versions** tab and place it here:
-
-```text
-MVID/
-  model/
-    mvid_5ds2_inference.pt
-```
-
-This location is the default for both inference entry points. To keep the
-checkpoint elsewhere, pass `--checkpoint /path/to/checkpoint.pt` or set
-`MVID_CHECKPOINT` to that path. No additional backbone checkpoint is required.
-
-## Run the Gradio demo
-
-From the repository root with the `mvid` environment activated:
-
-```bash
 python app.py
 ```
 
-Open **http://127.0.0.1:7860**. The model loads on the first inference.
+Open **http://127.0.0.1:7860**. Upload views of one scene or a video, then click
+**Run decomposition**. Single images are supported. Start with 2–4 views at 518
+pixels; reduce resolution or view count if GPU memory runs out.
 
-1. Upload one or more images of the **same scene**, or upload a video.
-   Clear the other input when switching between images and video.
-2. Choose the inference long edge and image limit / video frame count.
-   Video frames are sampled uniformly over the whole clip. The first image
-   or sampled frame is the reference view.
-3. Click **Run decomposition** to run inference. Inspect the albedo, shading, residual,
-   reconstruction, relative depth and normal tabs.
-4. Download the ZIP containing PNG previews, raw NPZ maps and metadata.
-
-To choose a different checkpoint or port:
-
-```bash
-python app.py --checkpoint /path/to/mvid_5ds2_inference.pt --port 7861
-```
-
-For access from another computer on your network, add `--host 0.0.0.0` and
-open `http://SERVER_IP:7860`. The default listens locally and does not create
-a public Gradio sharing link. For a remote server accessed over SSH, you can
-instead forward the local-only port with `ssh -L 7860:localhost:7860 USER@SERVER`.
-
-## Command-line inference
-
-Run multiple views jointly without starting a web server:
+Command-line inference:
 
 ```bash
 python inference.py --images /path/to/view1.jpg /path/to/view2.jpg --size 518
-```
-
-A single image is also supported:
-
-```bash
-python inference.py --images /path/to/image.jpg
-```
-
-Sample eight frames from a video and decompose them jointly:
-
-```bash
 python inference.py --video /path/to/video.mp4 --max-frames 8 --size 518
 ```
 
-Both image and video inference accept `--checkpoint`, `--device` and
-`--output-dir`. The supported long-edge choices are 280, 518 and 700;
-`--max-frames` defaults to 8 and can be increased to 16. For images this is
-an upper limit, not a subsampling option. List images in the desired view order.
+Available sizes: **280, 518, 700**. Video frames are sampled uniformly.
 
-## Inference outputs
+## MVID-Omega
 
-> **Color space:** Raw model predictions and the exported NPZ `albedo`,
-> `shading`, `residual` and `reconstruction` maps are in **linear RGB**, not sRGB.
-> If your application needs sRGB, you must perform the conversion yourself.
-> Compute `A * S + R` in linear space **before** converting for display.
-> The Gradio gallery and exported PNG previews already have display conversions
-> applied; do not apply a second linear-to-sRGB conversion to them.
+Download the weights (about **1.88 GB**) and start Gradio:
 
-
-Gradio saves results under `outputs/gradio/`; command-line inference uses
-`outputs/inference/`. Every run creates its own subdirectory containing
-`view_000_albedo.png`, other preview PNGs, `view_000_linear.npz`,
-`metadata.json` and `results.zip`. Results remain on disk until removed manually.
-
-Both entry points use the same preprocessing and FP32 inference. Inputs are
-resized to a grid of 14 pixels and mixed aspect ratios are padded; padding is
-removed from exported maps. Output resolution follows the resized inputs.
-The checkpoint is loaded strictly with camera, track and point heads disabled,
-and depth and intrinsic heads enabled.
-
-| NPZ key | Meaning |
-| --- | --- |
-| `input` | Input sRGB image in [0, 1] |
-| `albedo` | Linear diffuse albedo |
-| `shading` | Linear RGB shading, potentially HDR |
-| `residual` | Linear RGB residual, potentially HDR |
-| `reconstruction` | Linear `albedo * shading + residual` |
-| `depth` | Relative depth |
-| `normal` | Normals in the first view's camera coordinates |
-
-Read the uncompressed-value, float32 maps with NumPy:
-
-```python
-import numpy as np
-
-with np.load("outputs/inference/mvid_RUN_ID/view_000_linear.npz") as maps:
-    albedo = maps["albedo"]
-    shading = maps["shading"]
-    residual = maps["residual"]
-    reconstruction = albedo * shading + residual
+```bash
+hf download dukang92/MVID mvid_r768b_ep170_slim_bf16.safetensors --local-dir model
+python mvid-omega/app.py
 ```
 
-Replace `mvid_RUN_ID` with the directory printed by the inference command.
-PNG previews are for display: albedo and reconstruction are converted to sRGB
-and clipped to [0, 1]. Shading and residual each use a separate 99th-percentile
-exposure shared across all frames and RGB channels, followed by sRGB conversion.
-These display operations do not alter the raw NPZ values. Use NPZ maps for
-numerical analysis or further processing.
+Open **http://127.0.0.1:7861**. Upload views of one scene and click
+**Run decomposition**. Single images are supported. For video, extract frames first.
 
-For example, convert a raw linear albedo map to an sRGB preview yourself:
+Command-line inference:
+
+```bash
+python mvid-omega/inference.py \
+  --images /path/to/view1.jpg /path/to/view2.jpg \
+  --size 512 \
+  --output-dir outputs/mvid-omega/run01
+```
+
+Gradio sizes: **256, 512, 768**. The CLI accepts positive multiples of 16.
+Omega uses a mixed-precision backbone and FP32 dense heads; original MVID runs
+in FP32. The published Omega checkpoint stores BF16 weights and omits unused
+camera and SH branches. Both entry points load the remaining weights strictly.
+
+For either version, use `--checkpoint /path/to/weights` to override the default.
+Gradio also accepts `--port` and `--host 0.0.0.0` for network access.
+
+## Results and color space
+
+**Raw A, S, R and reconstruction maps are linear RGB, not sRGB.**
+Compute `A * S + R` in linear space. If you need sRGB, convert it yourself.
+Gradio galleries and PNG previews are already display-converted; do not convert
+them again. Shading and residual previews each use a shared exposure across views.
+
+| Output | MVID | MVID-Omega |
+| --- | --- | --- |
+| Gradio | `outputs/gradio/` | `outputs/mvid-omega-gradio/` |
+| CLI default | `outputs/inference/` | `outputs/mvid-omega/` |
+| Files | PNG previews, NPZ maps, metadata, ZIP | Gradio: same. CLI: NPZ maps and metadata |
+
+Gradio saves each request in a new subdirectory. The Omega CLI writes directly
+into `--output-dir`; choose a new directory to keep earlier results.
+
+Each `view_000_linear.npz` contains `input`, `albedo`, `shading`, `residual`,
+`reconstruction`, `depth` and `normal`. `input` is already sRGB; depth is relative.
+Normals use the first view's camera coordinates in MVID and each view's own
+camera coordinates in Omega. Do not apply sRGB conversion to depth or normals.
+
+Outputs follow the resized input resolution. MVID removes padding from exports.
+Omega center-crops extreme aspect ratios and retains padding for mixed image sizes.
+
+Example: save a raw linear albedo map as an sRGB PNG.
 
 ```python
 import numpy as np
 from PIL import Image
 
-
-def linear_to_srgb(x):
-    x = np.maximum(np.asarray(x, dtype=np.float32), 0.0)
-    return np.where(x <= 0.0031308, 12.92 * x,
-                    1.055 * np.power(x, 1.0 / 2.4) - 0.055)
-
-
-albedo_srgb = linear_to_srgb(albedo)
-preview = np.uint8(np.clip(albedo_srgb, 0, 1) * 255 + 0.5)
-Image.fromarray(preview).save("albedo_srgb.png")
+with np.load("/path/to/view_000_linear.npz") as maps:
+    a = np.maximum(maps["albedo"], 0)
+srgb = np.where(a <= 0.0031308, 12.92 * a, 1.055 * a ** (1 / 2.4) - 0.055)
+Image.fromarray(np.uint8(np.clip(srgb, 0, 1) * 255 + 0.5)).save("albedo_srgb.png")
 ```
 
 For HDR shading, residual or reconstruction, choose an exposure or tone mapping
-for display before sRGB encoding. Simply clipping values above 1 loses highlight
-detail. Keep the original linear maps for reconstruction and numerical work.
-The NPZ `input` is already sRGB; depth and normals are geometric data and should
-not receive an sRGB conversion.
+before sRGB encoding; clipping alone loses highlight detail.
 
+## Acknowledgements
+
+MVID builds on [VGGT](https://github.com/facebookresearch/vggt).
+MVID-Omega adapts VGGT-Omega. We thank the authors for their work.
+The Omega upstream code is covered by the FAIR Noncommercial Research License;
+see [LICENSE](mvid-omega/LICENSE) and [NOTICE](mvid-omega/NOTICE).
